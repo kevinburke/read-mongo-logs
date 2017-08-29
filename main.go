@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,12 +26,15 @@ type ProfileResult struct {
 
 func init() {
 	flag.Usage = func() {
-		os.Stderr.WriteString(`usage: read-mongo-logs [mongo-url]
+		os.Stderr.WriteString(`usage: read-mongo-logs [mongo-url] [--version] [--disable]
 
 Enable verbose Mongo logs on the provided database, and then tail the logs. We
 parse Mongo URL's the same way that the mongo shell client parses them, for
 example, specify "read-mongo-logs accounts" to connect to the accounts database
 on localhost.
+
+    --version:     [bool] Print the version and exit
+    --disable:     [bool] Disable Mongo query logging and exit
 `)
 	}
 }
@@ -213,8 +217,32 @@ var query = &bson.M{
 
 const Version = "0.2"
 
+func setProfilingLevel(db *mgo.Database, level int) error {
+	if level < 0 || level > 2 {
+		panic("invalid database level " + strconv.Itoa(level))
+	}
+	res := new(ProfileResult)
+	// this is the call underlying db.setProfilingLevel. note setProfilingLevel
+	// defaults to showing 100ms, we want to show everything.
+	// https://docs.mongodb.com/manual/reference/method/db.setProfilingLevel/
+	var slowms int
+	if level == 0 {
+		slowms = 100 // reset to default
+	} else {
+		slowms = 0
+	}
+	if err := db.Run(bson.D{{Name: "profile", Value: level}, {Name: "slowms", Value: slowms}}, res); err != nil {
+		return err
+	}
+	if !res.OK {
+		return errors.New("Could not enable verbose logging")
+	}
+	return nil
+}
+
 func main() {
 	version := flag.Bool("version", false, "Print the version string and exit")
+	disable := flag.Bool("disable", false, "Disable database profiling and exit")
 	flag.Parse()
 	if *version {
 		fmt.Fprintf(os.Stderr, "read-mongo-logs version %s\n", Version)
@@ -255,21 +283,24 @@ func main() {
 		WMode: "majority",
 	})
 	db := client.DB(info.Database)
-	res := new(ProfileResult)
-	// this is the call underlying db.setProfilingLevel. note setProfilingLevel
-	// defaults to showing 100ms, we want to show everything.
-	// https://docs.mongodb.com/manual/reference/method/db.setProfilingLevel/
-	if err := db.Run(bson.D{{Name: "profile", Value: 2}, {Name: "slowms", Value: 0}}, res); err != nil {
-		log.Fatal(err)
+	if *disable {
+		if err := setProfilingLevel(db, 0); err != nil {
+			log.Fatal(err.Error() + " on database " + info.Database)
+		}
+		os.Stderr.WriteString("Disabled system logging on database " + info.Database + ". Quitting\n")
+		return
 	}
-	if !res.OK {
-		log.Fatal("Could not enable verbose logging on " + info.Database)
+	if err := setProfilingLevel(db, 2); err != nil {
+		log.Fatal(err.Error() + " on database " + info.Database)
 	}
 	iter := db.C("system.profile").Find(query).Tail(-1)
+	if os.Getenv("DEBUG") == "true" {
+		if err := debugLoop(iter, info.Database, os.Stdout); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if err := loop(iter, info.Database, os.Stdout); err != nil {
 		log.Fatal(err)
 	}
-	//if err := debugLoop(iter, info.Database, os.Stdout); err != nil {
-	//log.Fatal(err)
-	//}
 }
