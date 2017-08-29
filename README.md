@@ -5,7 +5,7 @@ this binary to enable verbose Mongo logs on the database in question, then
 immediately start tailing the logs. Example output:
 
 ```
-2017-08-29T11:45:41-07:00 "" 127.0.0.1 QUERY {"filter":{"$and":[{"inviteeEmail":"dkimmel@gmail.com"},{"$or":[{"status":1},{"status":2}]}]},"find":"invites"}
+2017-08-29T11:45:41-07:00 "" 127.0.0.1 QUERY invites {"$and":[{"inviteeEmail":"kevin@burke.services"},{"$or":[{"status":1},{"status":2}]}]}
 2017-08-29T11:45:41-07:00 "" 127.0.0.1 result: time:0s returned:1
 2017-08-29T13:03:52-07:00 "" 127.0.0.1 REMOVE locks {"ownerId":"81fcaadb-5c26-4863-8a11-dca0b70bbf79"}
 2017-08-29T13:03:52-07:00 "" 127.0.0.1 result: time:0s deleted:0
