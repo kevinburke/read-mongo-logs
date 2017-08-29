@@ -11,7 +11,7 @@ $(MEGACHECK):
 	go get honnef.co/go/tools/cmd/megacheck
 
 lint: $(MEGACHECK)
-	$(MEGACHECK) --ignore='github.com/kevinburke/read-mongo-logs/*.go:U1000' ./...
+	go list ./... | grep -v vendor | xargs $(MEGACHECK) --ignore='github.com/kevinburke/read-mongo-logs/*.go:U1000'
 	go vet ./...
 
 race-test: lint

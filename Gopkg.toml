@@ -1,0 +1,4 @@
+
+[[constraint]]
+  branch = "v2"
+  name = "gopkg.in/mgo.v2"
