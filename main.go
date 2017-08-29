@@ -211,7 +211,7 @@ var query = &bson.M{
 	"command.listIndexes": bson.M{"$exists": false},
 }
 
-const Version = "0.1"
+const Version = "0.2"
 
 func main() {
 	version := flag.Bool("version", false, "Print the version string and exit")
