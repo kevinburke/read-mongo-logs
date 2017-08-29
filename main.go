@@ -134,13 +134,17 @@ func loop(iter *mgo.Iter, db string, w io.Writer) error {
 			if !ok {
 				return errors.New("query: could not convert find argument to string")
 			}
-			data, err := json.Marshal(result.Query["filter"])
-			if err != nil {
-				log.Fatal(err)
-			}
 			buf.WriteString(find)
 			buf.WriteByte(' ')
-			buf.Write(data)
+			if filter := result.Query["filter"]; filter == nil {
+				buf.WriteString("{} ")
+			} else {
+				data, err := json.Marshal(filter)
+				if err != nil {
+					log.Fatal(err)
+				}
+				buf.Write(data)
+			}
 			fmt.Fprintf(buf2, "returned:%d ", result.NumReturned)
 		case "update":
 			data, err := json.Marshal(result.Query)
@@ -251,6 +255,7 @@ func main() {
 	if flag.NArg() != 1 {
 		os.Stderr.WriteString("error: Please supply a database argument\n\n")
 		flag.Usage()
+		os.Exit(2)
 	}
 	// logic taken from
 	// https://github.com/mongodb/mongo/blob/master/src/mongo/shell/mongo.js#L352
