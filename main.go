@@ -215,7 +215,7 @@ var query = &bson.M{
 	"command.listIndexes": bson.M{"$exists": false},
 }
 
-const Version = "0.2"
+const Version = "0.3"
 
 func setProfilingLevel(db *mgo.Database, level int) error {
 	if level < 0 || level > 2 {
