@@ -256,6 +256,9 @@ func main() {
 	})
 	db := client.DB(info.Database)
 	res := new(ProfileResult)
+	// this is the call underlying db.setProfilingLevel. note setProfilingLevel
+	// defaults to showing 100ms, we want to show everything.
+	// https://docs.mongodb.com/manual/reference/method/db.setProfilingLevel/
 	if err := db.Run(bson.D{{Name: "profile", Value: 2}, {Name: "slowms", Value: 0}}, res); err != nil {
 		log.Fatal(err)
 	}
