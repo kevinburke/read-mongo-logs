@@ -122,6 +122,39 @@ func debugLoop(iter *mgo.Iter, db string, writes bool, w io.Writer) error {
 	return nil
 }
 
+func writeFindAndModify(buf *bytes.Buffer, collection string, command bson.M) error {
+	buf.WriteString("FINDANDMODIFY ")
+	buf.WriteString(collection)
+	buf.WriteByte(' ')
+	new, ok := command["new"].(bool)
+	if ok {
+		fmt.Fprintf(buf, "new:%t ", new)
+		delete(command, "new")
+	}
+	query, ok := command["query"].(bson.M)
+	if ok {
+		data, err := json.Marshal(query)
+		if err != nil {
+			return err
+		}
+		delete(command, "query")
+		buf.Write(data)
+		buf.WriteByte(' ')
+	}
+	update, ok := command["update"].(bson.M)
+	if ok {
+		data, err := json.Marshal(update)
+		if err != nil {
+			return err
+		}
+		delete(command, "update")
+		buf.Write(data)
+		buf.WriteByte(' ')
+	}
+	delete(command, "findAndModify")
+	return nil
+}
+
 func loop(iter *mgo.Iter, db string, writes bool, w io.Writer) error {
 	result := new(LogResult)
 	buf := new(bytes.Buffer)  // query line
@@ -199,6 +232,13 @@ func loop(iter *mgo.Iter, db string, writes bool, w io.Writer) error {
 			buf.WriteByte(' ')
 			buf.Write(data)
 		case "command":
+			fam, ok := result.Command["findAndModify"].(string)
+			if ok {
+				buf.Truncate(buf.Len() - len("COMMAND ")) // kinda ugly, but eh
+				if err := writeFindAndModify(buf, fam, result.Command); err != nil {
+					return err
+				}
+			}
 			data, err := json.Marshal(result.Command)
 			if err != nil {
 				return err
