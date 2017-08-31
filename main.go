@@ -24,9 +24,13 @@ type ProfileResult struct {
 	OK     bool
 }
 
+var version = flag.Bool("version", false, "Print the version string and exit")
+var disable = flag.Bool("disable", false, "Disable database profiling and exit")
+var writes = flag.Bool("writes", false, "Only display write queries (no reads)")
+
 func init() {
 	flag.Usage = func() {
-		os.Stderr.WriteString(`usage: read-mongo-logs [mongo-url] [--version] [--disable]
+		os.Stderr.WriteString(`usage: read-mongo-logs [mongo-url] [--version] [--disable] [--writes]
 
 Enable verbose Mongo logs on the provided database, and then tail the logs. We
 parse Mongo URL's the same way that the mongo shell client parses them, for
@@ -35,6 +39,7 @@ on localhost.
 
     --version:     [bool] Print the version and exit
     --disable:     [bool] Disable Mongo query logging and exit
+    --writes:      [bool] Only display insert/update/remove queries (no reads)
 `)
 	}
 }
@@ -55,21 +60,23 @@ func (m *MongoDuration) SetBSON(raw bson.Raw) error {
 
 // Documentation is here: https://docs.mongodb.com/manual/reference/database-profiler/
 type LogResult struct {
-	AppName     string        `bson:"appName"`
-	Command     bson.M        `bson:"command"`
-	Client      string        `bson:"client"`
-	Duration    MongoDuration `bson:"millis"`
-	NumDeleted  int           `bson:"ndeleted"`
-	NumMatched  int           `bson:"nMatched"`
-	NumModified int           `bson:"nModified"`
-	NumReturned int           `bson:"nreturned"`
-	Namespace   string        `bson:"ns"`
-	Op          string        `bson:"op"`
-	Query       bson.M        `bson:"query"`
-	Size        int64         `bson:"responseLength"`
-	Time        time.Time     `bson:"ts"`
-	Update      bson.M        `bson:"updateobj"`
-	User        string        `bson:"user"`
+	AppName        string        `bson:"appName"`
+	Command        bson.M        `bson:"command"`
+	Client         string        `bson:"client"`
+	Duration       MongoDuration `bson:"millis"`
+	NumDeleted     int           `bson:"ndeleted"`
+	NumMatched     int           `bson:"nMatched"`
+	NumModified    int           `bson:"nModified"`
+	NumReturned    int           `bson:"nreturned"`
+	Namespace      string        `bson:"ns"`
+	Op             string        `bson:"op"`
+	Query          bson.M        `bson:"query"`
+	Size           int64         `bson:"responseLength"`
+	Time           time.Time     `bson:"ts"`
+	Update         bson.M        `bson:"updateobj"`
+	Upsert         bool          `bson:"upsert"`
+	User           string        `bson:"user"`
+	WriteConflicts int           `bson:"writeConflicts"`
 }
 
 func writePrefix(buf *bytes.Buffer, result *LogResult) {
@@ -85,7 +92,7 @@ func writePrefix(buf *bytes.Buffer, result *LogResult) {
 	buf.WriteByte(' ')
 }
 
-func debugLoop(iter *mgo.Iter, db string, w io.Writer) error {
+func debugLoop(iter *mgo.Iter, db string, writes bool, w io.Writer) error {
 	// useful for debugging and getting the raw query
 	result := new(bson.M)
 	count := 0
@@ -115,7 +122,7 @@ func debugLoop(iter *mgo.Iter, db string, w io.Writer) error {
 	return nil
 }
 
-func loop(iter *mgo.Iter, db string, w io.Writer) error {
+func loop(iter *mgo.Iter, db string, writes bool, w io.Writer) error {
 	result := new(LogResult)
 	buf := new(bytes.Buffer)  // query line
 	buf2 := new(bytes.Buffer) // result line
@@ -130,6 +137,9 @@ func loop(iter *mgo.Iter, db string, w io.Writer) error {
 		fmt.Fprintf(buf2, "time:%s size:%d ", time.Duration(result.Duration).String(), result.Size)
 		switch result.Op {
 		case "query":
+			if writes {
+				continue
+			}
 			find, ok := result.Query["find"].(string)
 			if !ok {
 				return errors.New("query: could not convert find argument to string")
@@ -149,16 +159,17 @@ func loop(iter *mgo.Iter, db string, w io.Writer) error {
 		case "update":
 			data, err := json.Marshal(result.Query)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 			buf.WriteString(strings.TrimPrefix(result.Namespace, db+"."))
 			buf.WriteByte(' ')
+			fmt.Fprintf(buf, "upsert:%t ", result.Upsert)
 			buf.Write(data)
 			buf.WriteByte(' ')
 			// TODO: how to add two different documents here? newline?
 			data2, err2 := json.Marshal(result.Update)
 			if err2 != nil {
-				log.Fatal(err2)
+				return err2
 			}
 			buf.Write(data2)
 			fmt.Fprintf(buf2, "matched:%d modified:%d ", result.NumMatched, result.NumModified)
@@ -245,8 +256,6 @@ func setProfilingLevel(db *mgo.Database, level int) error {
 }
 
 func main() {
-	version := flag.Bool("version", false, "Print the version string and exit")
-	disable := flag.Bool("disable", false, "Disable database profiling and exit")
 	flag.Parse()
 	if *version {
 		fmt.Fprintf(os.Stderr, "read-mongo-logs version %s\n", Version)
@@ -300,12 +309,12 @@ func main() {
 	}
 	iter := db.C("system.profile").Find(query).Tail(-1)
 	if os.Getenv("DEBUG") == "true" {
-		if err := debugLoop(iter, info.Database, os.Stdout); err != nil {
+		if err := debugLoop(iter, info.Database, *writes, os.Stdout); err != nil {
 			log.Fatal(err)
 		}
 		return
 	}
-	if err := loop(iter, info.Database, os.Stdout); err != nil {
+	if err := loop(iter, info.Database, *writes, os.Stdout); err != nil {
 		log.Fatal(err)
 	}
 }
