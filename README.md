@@ -44,12 +44,12 @@ read-mongo-logs --disable 192.168.0.5:9999/foo
 Find your target operating system (darwin, windows, linux) and desired bin
 directory, and modify the command below as appropriate:
 
-    curl --silent --location https://github.com/kevinburke/read-mongo-logs/releases/download/0.3/read-mongo-logs-linux-amd64 > /usr/local/bin/read-mongo-logs && chmod 755 /usr/local/bin/read-mongo-logs
+    curl --silent --location https://github.com/kevinburke/read-mongo-logs/releases/download/0.4/read-mongo-logs-linux-amd64 > /usr/local/bin/read-mongo-logs && chmod 755 /usr/local/bin/read-mongo-logs
 
 On Travis, you may want to create `$HOME/bin` and write to that, since
 /usr/local/bin isn't writable with their container-based infrastructure.
 
-The latest version is 0.3.
+The latest version is 0.4.
 
 If you have a Go development environment, you can also install via source code:
 
